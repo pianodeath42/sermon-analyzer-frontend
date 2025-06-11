@@ -97,10 +97,7 @@
         <div id="loadingOverlay" class="loading-overlay hidden">
             <div class="spinner"></div>
             <p class="mt-4 text-lg text-indigo-700 font-semibold">Step 2: Processing Sermon...</p>
-            <p class="text-sm text-gray-600 mt-2">
-                <span class="block">Converting to MP3 & Generating Transcript...</span>
-                <span class="block mt-1">Applying AI for Summary, Key Points, and Questions...</span>
-            </p>
+            <p id="loadingMessage" class="text-sm text-gray-600 mt-2">Initializing...</p>
             <p class="text-xs text-gray-500 mt-4">
                 (This process can take a few minutes depending on sermon length and internet speed.)
             </p>
@@ -184,14 +181,14 @@
             serverTimestamp
         } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        // Global Firebase instances
+        // Global Firebase instances (declared at top of script scope)
         let app;
         let db;
         let auth;
-        let userId = 'anonymous'; // Default to anonymous
-        let currentSermonVideoId = 'sermon_placeholder_id'; // Placeholder/Default ID for Q&A linkage
+        let userId = 'anonymous';
+        let currentSermonVideoId = 'sermon_placeholder_id';
 
-        // Your web app's Firebase configuration - PROVIDED BY USER
+        // Your web app's Firebase configuration (directly provided)
         const firebaseConfig = {
             apiKey: "AIzaSyA9qs75ND5WglI56uLMBhcR-IgSi96XMRY",
             authDomain: "sermon-analyzer-b4e86.firebaseapp.com",
@@ -201,21 +198,21 @@
             appId: "1:711374420058:web:5777381ddab55d1eac0063",
             measurementId: "G-7TMNLYLCFM"
         };
+        // Use projectId for appId for Firestore path consistency in non-Canvas env
+        const appId = firebaseConfig.projectId;
 
-        // Firebase Initialization Function
+
+        // Firebase Initialization Function (defined in global scope)
         async function initializeFirebase() {
             try {
-                // Initialize Firebase app directly with the provided config
                 app = initializeApp(firebaseConfig);
-                const analytics = getAnalytics(app); // Initialize Analytics
+                const analytics = getAnalytics(app);
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // Initial anonymous sign-in
                 await signInAnonymously(auth);
                 console.log("Firebase anonymous sign-in successful.");
 
-                // Listen for auth state changes to get user ID
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
                         userId = user.uid;
@@ -223,7 +220,6 @@
                         console.log("Authenticated with user ID:", userId);
                         setupQuestionsListener();
                     } else {
-                        // If user somehow signs out, ensure a random ID is set
                         userId = `anon-${crypto.randomUUID()}`;
                         document.getElementById('currentUserId').textContent = userId + " (Anonymous)";
                         console.log("Signed out. Using generated ID:", userId);
@@ -370,6 +366,42 @@
                 }
 
                 document.getElementById('loadingOverlay').classList.remove('hidden');
+                // NEW: Reset loading message and start sequence
+                let currentMessageIndex = 0;
+                const progressMessages = [
+                    'Downloading audio from YouTube...',
+                    'Generating transcript (this can take a while)...',
+                    'Applying AI analysis (summary, key points, questions)...',
+                    'Finalizing results...'
+                ];
+                const loadingMessageElement = document.getElementById('loadingMessage');
+                loadingMessageElement.textContent = progressMessages[currentMessageIndex];
+
+                // Function to update progress message
+                const updateProgressMessage = () => {
+                    currentMessageIndex = (currentMessageIndex + 1) % progressMessages.length;
+                    loadingMessageElement.textContent = progressMessages[currentMessageIndex];
+                };
+
+                // Simulate progress updates - these are based on estimated times
+                const simulatedTimeouts = []; // Array to hold all timeout IDs
+
+                // Stage 1: Download Audio (5 seconds)
+                simulatedTimeouts.push(setTimeout(() => {
+                    loadingMessageElement.textContent = progressMessages[1]; // Move to transcript stage
+                }, 5000));
+
+                // Stage 2: Transcription (10 seconds)
+                simulatedTimeouts.push(setTimeout(() => {
+                    loadingMessageElement.textContent = progressMessages[2]; // Move to AI analysis stage
+                }, 5000 + 10000)); // Total 15 seconds
+
+                // Stage 3: AI Analysis (10 seconds)
+                simulatedTimeouts.push(setTimeout(() => {
+                    loadingMessageElement.textContent = progressMessages[3]; // Move to finalizing stage
+                }, 5000 + 10000 + 10000)); // Total 25 seconds
+
+
                 document.getElementById('sermonContent').classList.add('hidden');
 
                 try {
@@ -393,6 +425,8 @@
                     console.error("Error during sermon analysis:", error);
                     alert(`Analysis failed: ${error.message}. Please check console for details.`);
                 } finally {
+                    // Clear all pending timeouts
+                    simulatedTimeouts.forEach(clearTimeout);
                     document.getElementById('loadingOverlay').classList.add('hidden');
                 }
             });
