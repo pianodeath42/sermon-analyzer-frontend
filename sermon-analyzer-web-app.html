@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sermon Analyzer - YouTube to AI Insights</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: #374151;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 0.75rem; /* rounded-lg */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* shadow-md */
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .btn-primary {
+            background-color: #4f46e5; /* indigo-600 */
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem; /* rounded-md */
+            transition: background-color 0.2s;
+            display: inline-flex; /* Use flex for centering content */
+            align-items: center;
+            justify-content: center;
+            font-weight: 500; /* Medium font weight */
+        }
+        .btn-primary:hover {
+            background-color: #4338ca; /* indigo-700 */
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            flex-direction: column; /* Stack children vertically */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #4f46e5;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        /* Custom list styling for key points and questions to ensure spacing */
+        .content-list li {
+            margin-bottom: 0.5rem;
+        }
+        /* Style for markdown code blocks within the LLM output */
+        pre.markdown-output {
+            background-color: #f8fafc; /* gray-50 */
+            border: 1px solid #e2e8f0; /* gray-200 */
+            border-radius: 0.5rem;
+            padding: 1rem;
+            font-family: monospace;
+            white-space: pre-wrap; /* Preserve whitespace and wrap long lines */
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div class="container py-8">
+        <h1 class="text-4xl font-bold text-center text-indigo-700 mb-8">Sermon Analyzer: YouTube to AI Insights</h1>
+
+        <!-- Step 1: Provide YouTube URL -->
+        <div class="card">
+            <h2 class="text-2xl font-semibold text-indigo-600 mb-4">Step 1: Provide YouTube URL</h2>
+            <div class="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
+                <input type="text" id="youtubeUrl" placeholder="Enter YouTube Sermon URL (e.g., https://www.youtube.com/watch?v=uUxvxAow3cA)"
+                       class="flex-grow p-3 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 shadow-sm w-full">
+                <button id="analyzeBtn" class="btn-primary w-full sm:w-auto">Analyze Sermon</button>
+            </div>
+        </div>
+
+        <!-- Step 2: Processing (Real Backend Call) -->
+        <div id="loadingOverlay" class="loading-overlay hidden">
+            <div class="spinner"></div>
+            <p class="mt-4 text-lg text-indigo-700 font-semibold">Step 2: Processing Sermon...</p>
+            <p class="text-sm text-gray-600 mt-2">
+                <span class="block">Converting to MP3 & Generating Transcript...</span>
+                <span class="block mt-1">Applying AI for Summary, Key Points, and Questions...</span>
+            </p>
+            <p class="text-xs text-gray-500 mt-4">
+                (This process can take a few minutes depending on sermon length and internet speed.)
+            </p>
+        </div>
+
+        <!-- Step 3: Output -->
+        <div id="sermonContent" class="hidden">
+            <div class="card">
+                <h2 class="text-2xl font-semibold text-indigo-600 mb-4">Step 3: Sermon Insights & Discussion</h2>
+            </div>
+            
+            <!-- Sermon Details -->
+            <div class="card">
+                <h3 class="text-xl font-semibold text-indigo-600 mb-3">Sermon Details</h3>
+                <p class="text-lg mb-2"><strong class="font-medium">Title:</strong> <span id="sermonTitle"></span></p>
+                <p class="text-lg mb-2"><strong class="font-medium">Speaker:</strong> <span id="sermonSpeaker"></span></p>
+                <p class="text-lg mb-2"><strong class="font-medium">Date:</strong> <span id="sermonDate"></span></p>
+                <p class="text-lg mb-2"><strong class="font-medium">Video Link:</strong> <a id="sermonVideoLink" href="#" target="_blank" class="text-indigo-500 hover:underline">Watch on YouTube</a></p>
+                <p class="text-sm text-gray-500 mt-4">
+                    <strong class="font-medium">Sermon ID:</strong> <span id="sermonVideoId"></span>
+                    <br>
+                    <strong class="font-medium">Your User ID:</strong> <span id="currentUserId">Loading...</span>
+                </p>
+            </div>
+
+            <!-- Sermon Summary -->
+            <div class="card">
+                <h3 class="text-xl font-semibold text-indigo-600 mb-3">Sermon Overview (Summary)</h3>
+                <!-- Use a pre tag to respect whitespace and newlines from LLM output -->
+                <pre id="sermonSummary" class="whitespace-pre-wrap"></pre>
+            </div>
+
+            <!-- Key Points -->
+            <div class="card">
+                <h3 class="text-xl font-semibold text-indigo-600 mb-3">Key Points</h3>
+                <pre id="sermonKeyPoints" class="markdown-output"></pre>
+            </div>
+
+            <!-- Scriptures Referenced -->
+            <div class="card">
+                <h3 class="text-xl font-semibold text-indigo-600 mb-3">Scriptures Referenced</h3>
+                <ul id="sermonScriptures" class="list-disc pl-5 space-y-2 content-list"></ul>
+            </div>
+
+            <!-- Reflection Questions -->
+            <div class="card">
+                <h3 class="text-xl font-semibold text-indigo-600 mb-3">Reflection Questions for Study</h3>
+                <pre id="sermonReflectionQuestions" class="markdown-output"></pre>
+            </div>
+
+            <!-- Viewer Q&A System -->
+            <div class="card">
+                <h3 class="text-xl font-semibold text-indigo-600 mb-3">Viewer Questions & Answers</h3>
+                <div class="mb-6">
+                    <textarea id="questionInput" class="w-full p-3 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" rows="4" placeholder="Ask a question about this sermon..."></textarea>
+                    <button id="submitQuestionBtn" class="btn-primary mt-3 w-full">Submit Question</button>
+                </div>
+                <div id="questionsList">
+                    <p class="text-gray-500">No questions submitted yet. Be the first to ask!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp }
+        from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import {
+            getAuth,
+            signInAnonymously,
+            signInWithCustomToken,
+            onAuthStateChanged
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            query,
+            orderBy,
+            onSnapshot,
+            serverTimestamp
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // Global Firebase instances
+        let app;
+        let db;
+        let auth;
+        let userId = 'anonymous'; // Default to anonymous
+        let currentSermonVideoId = 'sermon_placeholder_id'; // Placeholder/Default ID for Q&A linkage
+
+        // Firebase configuration and app ID are provided by the environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+        // --- Backend API URL ---
+        // IMPORTANT: If you run your FastAPI backend on a different port or host, update this.
+        const BACKEND_API_URL = 'http://127.0.0.1:8000';
+        const ANALYZE_ENDPOINT = `${BACKEND_API_URL}/analyze-sermon`;
+
+        // Function to display sermon analysis data from backend
+        function displaySermonAnalysis(data) {
+            // Extract core analysis results from the 'analysis' key
+            const analysis = data.analysis;
+
+            // Fill in sermon details
+            document.getElementById('sermonTitle').textContent = data.title || "N/A";
+            document.getElementById('sermonSpeaker').textContent = data.speaker || "N/A";
+            document.getElementById('sermonDate').textContent = data.date || "N/A";
+            document.getElementById('sermonVideoLink').href = data.youtube_url;
+            document.getElementById('sermonVideoLink').textContent = data.youtube_url; // Show full URL
+            document.getElementById('sermonVideoId').textContent = data.video_id;
+            currentSermonVideoId = data.video_id; // Update global ID for Q&A linkage
+
+            // Display LLM-generated content
+            document.getElementById('sermonSummary').textContent = analysis.summary;
+            document.getElementById('sermonKeyPoints').textContent = analysis.key_points; // Display as raw markdown
+            document.getElementById('sermonReflectionQuestions').textContent = analysis.reflection_questions; // Display as raw markdown
+
+            // Display Scriptures
+            const scripturesList = document.getElementById('sermonScriptures');
+            scripturesList.innerHTML = ''; // Clear previous scriptures
+            if (analysis.scriptures && Array.isArray(analysis.scriptures)) {
+                analysis.scriptures.forEach(scripture => {
+                    const li = document.createElement('li');
+                    li.textContent = scripture;
+                    scripturesList.appendChild(li);
+                });
+            } else {
+                scripturesList.innerHTML = '<li>Scriptures not available or in unexpected format.</li>';
+            }
+
+            document.getElementById('sermonContent').classList.remove('hidden');
+        }
+
+        // Initialize Firebase and Auth
+        async function initializeFirebase() {
+            try {
+                if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.projectId) {
+                    console.error("Firebase config is empty or invalid. Please ensure __firebase_config is properly set in Canvas.");
+                    // Fallback for local testing if Canvas doesn't inject it (replace with your actual Firebase config)
+                    app = initializeApp({
+                        apiKey: "YOUR_FIREBASE_API_KEY",
+                        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+                        projectId: "YOUR_PROJECT_ID",
+                        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+                        messagingSenderId: "YOUR_SENDER_ID",
+                        appId: "YOUR_APP_ID"
+                    });
+                } else {
+                    app = initializeApp(firebaseConfig);
+                }
+                
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Sign in with custom token or anonymously
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // Listen for auth state changes to get user ID
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('currentUserId').textContent = userId;
+                        console.log("Authenticated with user ID:", userId);
+                        setupQuestionsListener();
+                    } else {
+                        userId = `anon-${crypto.randomUUID()}`;
+                        document.getElementById('currentUserId').textContent = userId + " (Anonymous)";
+                        console.log("Signed out or anonymous. Using generated ID:", userId);
+                        setupQuestionsListener();
+                    }
+                });
+
+                console.log("Firebase initialized.");
+
+            } catch (error) {
+                console.error("Error initializing Firebase:", error);
+                document.getElementById('currentUserId').textContent = 'Error loading user ID';
+            }
+        }
+
+        // Function to submit a question
+        async function submitQuestion() {
+            const questionText = document.getElementById('questionInput').value.trim();
+            if (!questionText) {
+                console.warn("Please enter a question before submitting.");
+                return;
+            }
+
+            if (!db || !auth.currentUser) {
+                console.error("Firestore or user not ready. Please try again.");
+                return;
+            }
+
+            try {
+                const collectionPath = `artifacts/${appId}/public/data/UserSubmittedQuestions`;
+
+                const docRef = await addDoc(collection(db, collectionPath), {
+                    sermonId: currentSermonVideoId,
+                    userId: auth.currentUser.uid || userId,
+                    questionText: questionText,
+                    submissionTimestamp: serverTimestamp(),
+                    status: 'new'
+                });
+                console.log("Question submitted with ID: ", docRef.id);
+                document.getElementById('questionInput').value = '';
+            } catch (e) {
+                console.error("Error adding document: ", e);
+            }
+        }
+
+        // Set up real-time listener for questions
+        function setupQuestionsListener() {
+            if (!db) {
+                console.error("Firestore not initialized for listener.");
+                return;
+            }
+
+            const questionsListDiv = document.getElementById('questionsList');
+            const collectionPath = `artifacts/${appId}/public/data/UserSubmittedQuestions`;
+            const questionsCollectionRef = collection(db, collectionPath);
+            
+            const q = query(
+                questionsCollectionRef,
+                // Uncomment the line below to filter questions only for the current sermon:
+                // where("sermonId", "==", currentSermonVideoId),
+                orderBy("submissionTimestamp", "desc")
+            );
+
+            onSnapshot(q, (snapshot) => {
+                questionsListDiv.innerHTML = '';
+                if (snapshot.empty) {
+                    questionsListDiv.innerHTML = '<p class="text-gray-500">No questions submitted yet. Be the first to ask!</p>';
+                    return;
+                }
+
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (!data.questionText || !data.userId || !data.submissionTimestamp) {
+                        console.warn("Skipping malformed question document:", data);
+                        return;
+                    }
+
+                    const questionItem = document.createElement('div');
+                    questionItem.className = 'bg-gray-50 p-4 rounded-md mb-3 border border-gray-200';
+                    const timestamp = data.submissionTimestamp.toDate ? new Date(data.submissionTimestamp.toDate()).toLocaleString() : 'N/A';
+                    questionItem.innerHTML = `
+                        <p class="font-medium text-gray-700">${data.questionText}</p>
+                        <p class="text-sm text-gray-500 mt-1">Submitted by: ${data.userId} on ${timestamp}</p>
+                        <p class="text-xs text-gray-400">Sermon ID: ${data.sermonId || 'N/A'}</p>
+                    `;
+                    questionsListDiv.appendChild(questionItem);
+                });
+            }, (error) => {
+                console.error("Error listening to questions:", error);
+                questionsListDiv.innerHTML = '<p class="text-red-500">Error loading questions. Check console for details.</p>';
+            });
+        }
+
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initializeFirebase();
+
+            document.getElementById('analyzeBtn').addEventListener('click', async () => {
+                const youtubeUrl = document.getElementById('youtubeUrl').value.trim();
+                if (!youtubeUrl) {
+                    console.warn("Please enter a YouTube URL to analyze.");
+                    return;
+                }
+
+                document.getElementById('loadingOverlay').classList.remove('hidden');
+                document.getElementById('sermonContent').classList.add('hidden');
+
+                try {
+                    const response = await fetch(ANALYZE_ENDPOINT, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ youtube_url: youtubeUrl }),
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    displaySermonAnalysis(data);
+
+                } catch (error) {
+                    console.error("Error during sermon analysis:", error);
+                    alert(`Analysis failed: ${error.message}. Please check console for details.`); // Use alert for immediate feedback on error
+                } finally {
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                }
+            });
+
+            document.getElementById('submitQuestionBtn').addEventListener('click', submitQuestion);
+
+            // Optional: Auto-populate URL for quick testing during development
+            // document.getElementById('youtubeUrl').value = 'https://www.youtube.com/watch?v=uUxvxAow3cA';
+            // document.getElementById('analyzeBtn').click(); // Auto-trigger analysis
+        });
+
+    </script>
+</body>
+</html>
