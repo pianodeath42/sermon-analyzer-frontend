@@ -167,12 +167,11 @@
 
     <!-- Firebase SDKs -->
     <script type="module">
-        import { initializeApp }
-        from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
         import {
             getAuth,
             signInAnonymously,
-            signInWithCustomToken,
             onAuthStateChanged
         } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import {
@@ -192,18 +191,60 @@
         let userId = 'anonymous'; // Default to anonymous
         let currentSermonVideoId = 'sermon_placeholder_id'; // Placeholder/Default ID for Q&A linkage
 
-        // Firebase configuration and app ID are provided by the environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        // Your web app's Firebase configuration - PROVIDED BY USER
+        const firebaseConfig = {
+            apiKey: "AIzaSyA9qs75ND5WglI56uLMBhcR-IgSi96XMRY",
+            authDomain: "sermon-analyzer-b4e86.firebaseapp.com",
+            projectId: "sermon-analyzer-b4e86",
+            storageBucket: "sermon-analyzer-b4e86.firebasestorage.app",
+            messagingSenderId: "711374420058",
+            appId: "1:711374420058:web:5777381ddab55d1eac0063",
+            measurementId: "G-7TMNLYLCFM"
+        };
 
+        // Firebase Initialization Function
+        async function initializeFirebase() {
+            try {
+                // Initialize Firebase app directly with the provided config
+                app = initializeApp(firebaseConfig);
+                const analytics = getAnalytics(app); // Initialize Analytics
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Initial anonymous sign-in
+                await signInAnonymously(auth);
+                console.log("Firebase anonymous sign-in successful.");
+
+                // Listen for auth state changes to get user ID
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('currentUserId').textContent = userId;
+                        console.log("Authenticated with user ID:", userId);
+                        setupQuestionsListener();
+                    } else {
+                        // If user somehow signs out, ensure a random ID is set
+                        userId = `anon-${crypto.randomUUID()}`;
+                        document.getElementById('currentUserId').textContent = userId + " (Anonymous)";
+                        console.log("Signed out. Using generated ID:", userId);
+                        setupQuestionsListener();
+                    }
+                });
+
+                console.log("Firebase initialization logic set up.");
+
+            } catch (error) {
+                console.error("Error initializing Firebase:", error);
+                document.getElementById('currentUserId').textContent = 'Error loading user ID';
+            }
+        }
+        
         // --- Backend API URL ---
-        // IMPORTANT: If you run your FastAPI backend on a different port or host, update this.
         const BACKEND_API_URL = 'https://d7bb-2601-243-c000-e590-a456-e209-81a8-4a33.ngrok-free.app';
         const ANALYZE_ENDPOINT = `${BACKEND_API_URL}/analyze-sermon`;
 
         // Function to display sermon analysis data from backend
         function displaySermonAnalysis(data) {
-            // Extract core analysis results from the 'analysis' key
             const analysis = data.analysis;
 
             // Fill in sermon details
@@ -217,12 +258,12 @@
 
             // Display LLM-generated content
             document.getElementById('sermonSummary').textContent = analysis.summary;
-            document.getElementById('sermonKeyPoints').textContent = analysis.key_points; // Display as raw markdown
-            document.getElementById('sermonReflectionQuestions').textContent = analysis.reflection_questions; // Display as raw markdown
+            document.getElementById('sermonKeyPoints').textContent = analysis.key_points;
+            document.getElementById('sermonReflectionQuestions').textContent = analysis.reflection_questions;
 
             // Display Scriptures
             const scripturesList = document.getElementById('sermonScriptures');
-            scripturesList.innerHTML = ''; // Clear previous scriptures
+            scripturesList.innerHTML = '';
             if (analysis.scriptures && Array.isArray(analysis.scriptures)) {
                 analysis.scriptures.forEach(scripture => {
                     const li = document.createElement('li');
@@ -234,58 +275,6 @@
             }
 
             document.getElementById('sermonContent').classList.remove('hidden');
-        }
-
-        // Initialize Firebase and Auth
-        async function initializeFirebase() {
-            try {
-                if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.projectId) {
-                    console.error("Firebase config is empty or invalid. Please ensure __firebase_config is properly set in Canvas.");
-                    // Fallback for local testing if Canvas doesn't inject it (replace with your actual Firebase config)
-                    app = initializeApp({
-                        apiKey: "YOUR_FIREBASE_API_KEY",
-                        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-                        projectId: "YOUR_PROJECT_ID",
-                        storageBucket: "YOUR_PROJECT_ID.appspot.com",
-                        messagingSenderId: "YOUR_SENDER_ID",
-                        appId: "YOUR_APP_ID"
-                    });
-                } else {
-                    app = initializeApp(firebaseConfig);
-                }
-                
-                db = getFirestore(app);
-                auth = getAuth(app);
-
-                // Sign in with custom token or anonymously
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                // Listen for auth state changes to get user ID
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        document.getElementById('currentUserId').textContent = userId;
-                        console.log("Authenticated with user ID:", userId);
-                        setupQuestionsListener();
-                    } else {
-                        userId = `anon-${crypto.randomUUID()}`;
-                        document.getElementById('currentUserId').textContent = userId + " (Anonymous)";
-                        console.log("Signed out or anonymous. Using generated ID:", userId);
-                        setupQuestionsListener();
-                    }
-                });
-
-                console.log("Firebase initialized.");
-
-            } catch (error) {
-                console.error("Error initializing Firebase:", error);
-                document.getElementById('currentUserId').textContent = 'Error loading user ID';
-            }
         }
 
         // Function to submit a question
@@ -302,7 +291,9 @@
             }
 
             try {
-                const collectionPath = `artifacts/${appId}/public/data/UserSubmittedQuestions`;
+                // Use firebaseConfig.projectId as appId for Firestore path consistency
+                const projectId = firebaseConfig.projectId;
+                const collectionPath = `artifacts/${projectId}/public/data/UserSubmittedQuestions`;
 
                 const docRef = await addDoc(collection(db, collectionPath), {
                     sermonId: currentSermonVideoId,
@@ -324,15 +315,15 @@
                 console.error("Firestore not initialized for listener.");
                 return;
             }
-
+            // Use firebaseConfig.projectId as appId for Firestore path consistency
+            const projectId = firebaseConfig.projectId;
             const questionsListDiv = document.getElementById('questionsList');
-            const collectionPath = `artifacts/${appId}/public/data/UserSubmittedQuestions`;
+            const collectionPath = `artifacts/${projectId}/public/data/UserSubmittedQuestions`;
             const questionsCollectionRef = collection(db, collectionPath);
             
             const q = query(
                 questionsCollectionRef,
-                // Uncomment the line below to filter questions only for the current sermon:
-                // where("sermonId", "==", currentSermonVideoId),
+                // where("sermonId", "==", currentSermonVideoId), // Filter by current sermon ID if desired
                 orderBy("submissionTimestamp", "desc")
             );
 
@@ -369,8 +360,8 @@
 
         // Event Listeners
         document.addEventListener('DOMContentLoaded', async () => {
-            await initializeFirebase();
-
+            await initializeFirebase(); // Call initializeFirebase here
+            
             document.getElementById('analyzeBtn').addEventListener('click', async () => {
                 const youtubeUrl = document.getElementById('youtubeUrl').value.trim();
                 if (!youtubeUrl) {
@@ -400,7 +391,7 @@
 
                 } catch (error) {
                     console.error("Error during sermon analysis:", error);
-                    alert(`Analysis failed: ${error.message}. Please check console for details.`); // Use alert for immediate feedback on error
+                    alert(`Analysis failed: ${error.message}. Please check console for details.`);
                 } finally {
                     document.getElementById('loadingOverlay').classList.add('hidden');
                 }
